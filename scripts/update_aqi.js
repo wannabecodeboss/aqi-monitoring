@@ -1,53 +1,54 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// Load Firebase service account from GitHub Secret
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-// Initialize Firebase Admin SDK
+// Initialize Firebase
+const serviceAccount = require("../serviceAccountKey.json");
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
 });
 
-// Function to fetch AQI data
-async function fetchAQI() {
-  const city = "Delhi"; // Change this if needed
-  const apiKey = process.env.AQICN_API_TOKEN;
-  const url = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
+const db = admin.database();
 
+// API Details
+const CITY = "delhi";
+const API_TOKEN = "f36238c6c7079c4f75849ca65cc35c312c8937b3";
+const API_URL = `https://api.waqi.info/feed/${CITY}/?token=${API_TOKEN}`;
+
+// Convert UTC to IST
+function getCurrentISTTime() {
+  let now = new Date();
+  let istOffset = 5.5 * 60 * 60 * 1000; // IST Offset (+5:30)
+  let istTime = new Date(now.getTime() + istOffset);
+  
+  let date = istTime.toISOString().split("T")[0]; // YYYY-MM-DD
+  let hour = istTime.getHours().toString().padStart(2, "0");
+  let minute = istTime.getMinutes().toString().padStart(2, "0");
+
+  return { date, time: `${hour}:${minute}` };
+}
+
+// Fetch AQI Data & Update Firebase
+async function fetchAndUpdateAQI() {
   try {
-    const response = await axios.get(url);
-    if (response.data.status === "ok") {
-      const aqiValue = response.data.data.aqi;
-      return aqiValue;
-    } else {
-      console.error("API Error:", response.data);
-      return null;
+    const response = await axios.get(API_URL);
+    const aqi = response.data.data.aqi;
+
+    if (!aqi) {
+      console.error("Error: Invalid AQI data received.");
+      return;
     }
+
+    const { date, time } = getCurrentISTTime();
+
+    // Store in Firebase at: Delhi/YYYY-MM-DD/HH:MM → AQI
+    await db.ref(`Delhi/${date}/${time}`).set(aqi);
+    
+    console.log(`✅ Updated AQI for Delhi: ${aqi} at ${time} IST`);
   } catch (error) {
-    console.error("Error fetching AQI:", error.message);
-    return null;
+    console.error("Error fetching AQI:", error);
   }
 }
 
-// Function to update Firebase
-async function updateFirebase(aqi) {
-  if (aqi === null) return;
-
-  const now = new Date();
-  const dateKey = now.toISOString().split("T")[0]; // YYYY-MM-DD
-  const timeKey = now.toLocaleTimeString("en-IN", { hour12: false }).slice(0, 5); // HH:MM
-
-  const db = admin.database();
-  await db.ref(`/${dateKey}/${timeKey}`).set(aqi);
-  console.log(`Updated AQI: ${aqi} at ${timeKey}`);
-}
-
-// Main function
-async function main() {
-  const aqi = await fetchAQI();
-  await updateFirebase(aqi);
-}
-
-main();
+// Run the function
+fetchAndUpdateAQI();
