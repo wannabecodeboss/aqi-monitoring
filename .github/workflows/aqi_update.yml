@@ -7,7 +7,34 @@ on:
 
 jobs:
   update_aqi:
+    runs-on: ubuntu-latestname: Update AQI Data
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Runs every hour
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  update_aqi:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm install axios firebase-admin
+
+      - name: Run AQI Update Script
+        env:
+          AQICN_API_TOKEN: ${{ secrets.AQICN_API_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/update_aqi.js
+
 
     steps:
       - name: Checkout repository
