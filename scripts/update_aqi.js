@@ -1,50 +1,46 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// Read Firebase credentials from environment variable
+// Load Firebase service account credentials
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
+// Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
 });
 
-const db = admin.database();
-
+const API_KEY = process.env.AQICN_API_TOKEN;
 const CITY = "delhi";
-const API_TOKEN = "f36238c6c7079c4f75849ca65cc35c312c8937b3";
-const API_URL = `https://api.waqi.info/feed/${CITY}/?token=${API_TOKEN}`;
+const FIREBASE_DB = admin.database();
 
-function getCurrentISTTime() {
-  let now = new Date();
-  let istOffset = 5.5 * 60 * 60 * 1000;
-  let istTime = new Date(now.getTime() + istOffset);
-  
-  let date = istTime.toISOString().split("T")[0]; // YYYY-MM-DD
-  let hour = istTime.getHours().toString().padStart(2, "0");
-  let minute = istTime.getMinutes().toString().padStart(2, "0");
-
-  return { date, time: `${hour}:${minute}` };
-}
-
-async function fetchAndUpdateAQI() {
+async function fetchAQIData() {
   try {
-    const response = await axios.get(API_URL);
-    const aqi = response.data.data.aqi;
-
-    if (!aqi) {
-      console.error("Error: Invalid AQI data received.");
-      return;
-    }
-
-    const { date, time } = getCurrentISTTime();
-
-    await db.ref(`Delhi/${date}/${time}`).set(aqi);
+    // Fetch real-time AQI
+    const realtimeRes = await axios.get(`https://api.waqi.info/feed/${CITY}/?token=${API_KEY}`);
+    const realtimeAQI = realtimeRes.data.data.aqi;
     
-    console.log(`✅ Updated AQI for Delhi: ${aqi} at ${time} IST`);
+    // Fetch forecast AQI
+    const forecastRes = await axios.get(`https://api.waqi.info/api/feed/${CITY}/forecast/?token=${API_KEY}`);
+    const forecastData = forecastRes.data.data.forecast.daily.pm25;
+
+    // Prepare data
+    const now = new Date();
+    const date = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const time = now.toTimeString().split(" ")[0].substring(0, 5); // HH:MM
+    
+    const data = {
+      real_time: realtimeAQI,
+      forecast: forecastData,
+    };
+
+    // Upload to Firebase
+    await FIREBASE_DB.ref(`aqi_data/${date}/${time}`).set(data);
+    console.log(`AQI data updated successfully: ${JSON.stringify(data)}`);
   } catch (error) {
-    console.error("Error fetching AQI:", error);
+    console.error("Error fetching AQI data:", error);
   }
 }
 
-fetchAndUpdateAQI();
+// Run the function
+fetchAQIData();
