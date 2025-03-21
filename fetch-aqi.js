@@ -1,32 +1,62 @@
+const axios = require("axios");
 const admin = require("firebase-admin");
 
-// Load Firebase service account credentials
+// Initialize Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  });
+}
 
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
-});
+const db = admin.database();
 
-const FIREBASE_DB = admin.database();
-
+// Fetch AQI Data
 async function fetchAQIData() {
   try {
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const snapshot = await FIREBASE_DB.ref(`aqi_data/${today}`).once("value");
+    const city = "delhi"; // Change this as needed
+    const apiKey = process.env.AQICN_API_TOKEN;
+    const apiUrl = `https://api.waqi.info/feed/${city}/?token=${apiKey}`;
 
-    if (!snapshot.exists()) {
-      console.log("No AQI data found for today.");
-      return;
+    const response = await axios.get(apiUrl);
+    console.log("Full API Response:", JSON.stringify(response.data, null, 2)); // Debugging line
+
+    if (response.data.status !== "ok") {
+      throw new Error("Invalid API response: " + response.data.data);
     }
 
-    const aqiData = snapshot.val();
-    console.log("AQI Data:", JSON.stringify(aqiData, null, 2));
+    const currentAQI = response.data.data.aqi;
+    const forecastData = response.data.data.forecast ? response.data.data.forecast.daily.pm25 : null;
+
+    if (!forecastData) {
+      console.warn("Warning: 'daily' forecast data is missing!");
+    }
+
+    return { currentAQI, forecastData };
   } catch (error) {
-    console.error("Error fetching AQI data:", error);
+    console.error("Error fetching AQI data:", error.message);
+    return null;
   }
 }
 
-// Run the function
-fetchAQIData();
+// Update Firebase
+async function updateFirebase() {
+  const aqiData = await fetchAQIData();
+  if (!aqiData) return;
+
+  const now = new Date();
+  const dateKey = now.toISOString().split("T")[0]; // YYYY-MM-DD
+  const timeKey = now.toTimeString().split(" ")[0].slice(0, 5); // HH:MM
+
+  const ref = db.ref(`aqi/${dateKey}/${timeKey}`);
+  await ref.set({
+    aqi: aqiData.currentAQI,
+    forecast: aqiData.forecastData || "N/A",
+  });
+
+  console.log(`Updated Firebase: ${dateKey} ${timeKey} -> AQI: ${aqiData.currentAQI}`);
+}
+
+// Run the update
+updateFirebase();
