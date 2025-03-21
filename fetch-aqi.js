@@ -1,35 +1,32 @@
-const axios = require("axios");
 const admin = require("firebase-admin");
 
-// Load Firebase Credentials from Secrets
+// Load Firebase service account credentials
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
+// Initialize Firebase Admin SDK
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
 });
 
-const db = admin.database();
-const API_TOKEN = "YOUR_API_TOKEN"; // Replace with actual API token
-const CITY = "delhi";
+const FIREBASE_DB = admin.database();
 
-async function fetchAndStoreAQI() {
-    const now = new Date();
-    const dateKey = now.toISOString().split("T")[0]; // YYYY-MM-DD
-    const timeKey = now.toTimeString().slice(0, 5); // HH:MM
+async function fetchAQIData() {
+  try {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const snapshot = await FIREBASE_DB.ref(`aqi_data/${today}`).once("value");
 
-    try {
-        const response = await axios.get(`https://api.waqi.info/feed/delhi/?token=f36238c6c7079c4f75849ca65cc35c312c8937b3);
-        if (response.data.status === "ok") {
-            const aqiValue = response.data.data.aqi;
-            await db.ref(`aqi/${dateKey}/${timeKey}`).set(aqiValue);
-            console.log(`Stored AQI ${aqiValue} for ${timeKey} on ${dateKey}`);
-        } else {
-            console.error("API Error:", response.data);
-        }
-    } catch (error) {
-        console.error("API Fetch Error:", error);
+    if (!snapshot.exists()) {
+      console.log("No AQI data found for today.");
+      return;
     }
+
+    const aqiData = snapshot.val();
+    console.log("AQI Data:", JSON.stringify(aqiData, null, 2));
+  } catch (error) {
+    console.error("Error fetching AQI data:", error);
+  }
 }
 
-fetchAndStoreAQI();
+// Run the function
+fetchAQIData();
