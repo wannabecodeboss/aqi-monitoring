@@ -1,0 +1,28 @@
+name: Fetch AQI Data & Update Firebase
+
+on:
+  schedule:
+    - cron: "30 2-17 * * *"  # Runs every hour from 07:30 to 22:30 IST (IST is UTC+5:30)
+  workflow_dispatch:  # Allows manual trigger from GitHub Actions
+
+jobs:
+  update_aqi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install firebase-admin axios
+
+      - name: Fetch AQI Data & Update Firebase
+        env:
+          AQICN_API_TOKEN: ${{ secrets.AQICN_API_TOKEN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/update_aqi.js
