@@ -1,8 +1,9 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// Initialize Firebase
-const serviceAccount = require("../serviceAccountKey.json");
+// Read Firebase credentials from environment variable
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
@@ -10,15 +11,13 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// API Details
 const CITY = "delhi";
 const API_TOKEN = "f36238c6c7079c4f75849ca65cc35c312c8937b3";
 const API_URL = `https://api.waqi.info/feed/${CITY}/?token=${API_TOKEN}`;
 
-// Convert UTC to IST
 function getCurrentISTTime() {
   let now = new Date();
-  let istOffset = 5.5 * 60 * 60 * 1000; // IST Offset (+5:30)
+  let istOffset = 5.5 * 60 * 60 * 1000;
   let istTime = new Date(now.getTime() + istOffset);
   
   let date = istTime.toISOString().split("T")[0]; // YYYY-MM-DD
@@ -28,7 +27,6 @@ function getCurrentISTTime() {
   return { date, time: `${hour}:${minute}` };
 }
 
-// Fetch AQI Data & Update Firebase
 async function fetchAndUpdateAQI() {
   try {
     const response = await axios.get(API_URL);
@@ -41,7 +39,6 @@ async function fetchAndUpdateAQI() {
 
     const { date, time } = getCurrentISTTime();
 
-    // Store in Firebase at: Delhi/YYYY-MM-DD/HH:MM → AQI
     await db.ref(`Delhi/${date}/${time}`).set(aqi);
     
     console.log(`✅ Updated AQI for Delhi: ${aqi} at ${time} IST`);
@@ -50,5 +47,4 @@ async function fetchAndUpdateAQI() {
   }
 }
 
-// Run the function
 fetchAndUpdateAQI();
