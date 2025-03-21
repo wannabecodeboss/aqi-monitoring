@@ -6,7 +6,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://aqi-monitoring-f0ba6-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    databaseURL: "https://your-firebase-database-url",
   });
 }
 
@@ -27,11 +27,10 @@ async function fetchAQIData() {
     }
 
     const currentAQI = response.data.data.aqi;
-    const forecastData = response.data.data.forecast ? response.data.data.forecast.daily.pm25 : null;
+    const forecastData = response.data.data.forecast?.daily?.pm25 || [];
 
-    if (!forecastData) {
-      console.warn("Warning: 'daily' forecast data is missing!");
-    }
+    console.log(`Current AQI: ${currentAQI}`);
+    console.log(`Forecast Data:`, forecastData);
 
     return { currentAQI, forecastData };
   } catch (error) {
@@ -52,7 +51,7 @@ async function updateFirebase() {
   const ref = db.ref(`aqi/${dateKey}/${timeKey}`);
   await ref.set({
     aqi: aqiData.currentAQI,
-    forecast: aqiData.forecastData || "N/A",
+    forecast: aqiData.forecastData,
   });
 
   console.log(`Updated Firebase: ${dateKey} ${timeKey} -> AQI: ${aqiData.currentAQI}`);
